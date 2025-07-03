@@ -6,7 +6,11 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.Node;
 
+import io.github.satsuki942.symboltable.SymbolTable;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,27 +26,52 @@ public class MyLangTransformer {
     public List<CompilationUnit> transform(List<CompilationUnit> MyLangASTs) {
         System.out.println("Starting transformation...");
 
-        // STEP1: extract normal classes (not versioned)
+
+        // STEP1: Generate a symbol table
+        SymbolTable symbolTable = new SymbolTable();
+        SymbolTableBuilderVisitor analysisVisitor = new SymbolTableBuilderVisitor();
+        for (CompilationUnit cu : MyLangASTs) {
+            analysisVisitor.visit(cu, symbolTable);
+        }
+
+        System.out.println("[SUCCESS] Generated a symbol table");
+
+
+        // STEP2: Dispatch versions of method calls
+        StaticVersionDispatchVisitor transformVisitor = new StaticVersionDispatchVisitor();
+        List<CompilationUnit> transformedAsts = new ArrayList<>();
+        for (CompilationUnit cu : MyLangASTs) {
+            Node transformedNode = (Node) transformVisitor.visit(cu, symbolTable);
+            if (transformedNode instanceof CompilationUnit) {
+                transformedAsts.add((CompilationUnit) transformedNode);
+            }
+        }
+
+        System.out.println("[SUCCESS] Dispatched versions of method calls");
+        System.out.println("    AST display is omitted");
+        // Print the transformed ASTs for debugging
+        // transformedAsts.forEach(cu -> {
+        //     System.out.println("Transformed AST: " + cu.getPrimaryTypeName().orElse("Unnamed"));
+        //     System.out.println(cu.toString());
+        // });
+
+
+        // STEP3: Merge versioned classes
         List<CompilationUnit> normalClassesASTs = MyLangASTs.stream()
                 .filter(cu -> !isVersioned(cu))
                 .collect(Collectors.toList());
-
-        // STEP2: group versioned classes by their base name
         Map<String, List<CompilationUnit>> versionedClassMap = MyLangASTs.stream()
                 .filter(this::isVersioned)
                 .collect(Collectors.groupingBy(this::getBaseName));
 
-        System.out.println("Found " + versionedClassMap.size() + " versioned class group(s).");
-
-        // STEP3: merge ASTs within each group into a single unified class
         List<CompilationUnit> transformedASTs = versionedClassMap.entrySet().stream()
                 .map(entry -> mergeClasses(entry.getKey(), entry.getValue()))
                 .collect(Collectors.toList());
-
-        // STEP4: combine unified classes with normal classes to form the final list
         transformedASTs.addAll(normalClassesASTs);
 
-        System.out.println("Transformation complete.");
+        System.out.println("[SUCCESS] Merged versioned classes");
+
+        System.out.println("[SUCCESS] Whole transformation completed");
         return transformedASTs;
     }
 
@@ -65,7 +94,6 @@ public class MyLangTransformer {
 
     // merge multiple versioned ASTs into a single unified class AST
     private CompilationUnit mergeClasses(String baseName, List<CompilationUnit> VersionedClassASTs) {
-        System.out.println("Merging class: " + baseName);
 
         // generate a new CompilationUnit for the unified class
         CompilationUnit mergedClassUnit = new CompilationUnit();
