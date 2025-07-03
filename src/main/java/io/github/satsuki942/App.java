@@ -23,20 +23,22 @@ public class App {
     static private String OUTPUTPATH = "target/output/";
     static private String OUTPUTPACKAGE = "sample";
     public static void main(String[] args) {
-        // input directory
-        String inputDir = INPUTPATH + args[0];
-        // output directory
+
+        Path inputDir = Paths.get(INPUTPATH + args[0]);
         Path outputDir = Paths.get(OUTPUTPATH + OUTPUTPACKAGE);
+
+        // Ensure the output directory exists
         try {
             Files.createDirectories(outputDir);
         } catch (IOException e) {
             e.printStackTrace();
             return;
         }
+        System.out.println("[SUCCESS] Created output directory: " + outputDir);
 
-        // 1. parse Java files in the input directory to create ASTs
+        // 1. parse Java files in the input directory to create MyLang-ASTs
         List<CompilationUnit> MyLangASTs = new ArrayList<>();
-        try (Stream<Path> paths = Files.walk(Paths.get(inputDir))) {
+        try (Stream<Path> paths = Files.walk(inputDir)) {
             List<Path> javaFiles = paths.filter(Files::isRegularFile)
                                         .filter(path -> path.toString().endsWith(".java"))
                                         .collect(Collectors.toList());
@@ -47,16 +49,18 @@ public class App {
             e.printStackTrace();
             return;
         }
+        System.out.println("[SUCCESS] Parsed " + MyLangASTs.size() + " MyLang-ASTs from " + inputDir);
 
-        // 2. call the transformer to transform the ASTs
+        // 2. call the transformer to transform the MyLang-ASTs
         MyLangTransformer transformer = new MyLangTransformer();
         List<CompilationUnit> transpiledAsts = transformer.transform(MyLangASTs);
 
         // 3. output the transformed ASTs to files
         List<String> generatedFilePaths = new ArrayList<>();
         for (CompilationUnit cu : transpiledAsts) {
-            YamlPrinter printer = new YamlPrinter(true);
-            System.out.println(printer.output(cu));
+            // For Debuging: Print the transpiled AST in YAML format
+            // YamlPrinter printer = new YamlPrinter(true);
+            // System.out.println(printer.output(cu));
             
             String className = cu.getTypes().stream()
                         .filter(type -> type.isPublic() && type.isClassOrInterfaceDeclaration())
@@ -67,33 +71,35 @@ public class App {
             try {
                 Files.write(outputFile, cu.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 generatedFilePaths.add(outputFile.toString());
-                System.out.println("Generated: " + outputFile.toAbsolutePath());
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
 
         // 4. compile the transpiled sources
-        System.out.println("\n--- Compiling transpiled sources ---");
+        System.out.println("Compiling transpiled sources...");
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         int compilationResult = compiler.run(null, null, null, 
             generatedFilePaths.toArray(new String[0]));
 
         if (compilationResult == 0) {
-            System.out.println("Compilation Succeeded.");
+            System.out.println("[SUCCESS] Compilation Succeeded.");
         } else {
-            System.err.println("Compilation Failed.");
+            System.err.println("[ERROR] Compilation Failed.");
             return;
         }
 
         // 5. run the compiled code
-        System.out.println("\n--- Running compiled code ---");
+        System.out.println("Running compiled code...");
         try {
+            System.out.println("\nRunning Result: ----------------------");
             Path outputPath = Paths.get(OUTPUTPATH);
             runProcess(outputPath, OUTPUTPACKAGE + ".Main");
+            System.out.println("--------------------------------------\n");
         } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
+        System.out.println("[SUCCESS] Execution completed.");
     }
 
     private static void runProcess(Path classpath, String mainClass) throws IOException, InterruptedException {
