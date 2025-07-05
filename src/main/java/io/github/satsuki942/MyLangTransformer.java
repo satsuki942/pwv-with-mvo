@@ -64,9 +64,18 @@ public class MyLangTransformer {
                 .filter(this::isVersioned)
                 .collect(Collectors.groupingBy(this::getBaseName));
 
+        // List<CompilationUnit> transformedASTs = versionedClassMap.entrySet().stream()
+        //         .map(entry -> mergeClasses(entry.getKey(), entry.getValue()))
+        //         .collect(Collectors.toList());
+
+        // ToDo: リファクタリング後に使う。上のmergeClassesを使った実装は消す。
         List<CompilationUnit> transformedASTs = versionedClassMap.entrySet().stream()
-                .map(entry -> mergeClasses(entry.getKey(), entry.getValue()))
+                .map(entry -> {
+                    UnifiedClassBuilder builder = new UnifiedClassBuilder(entry.getKey(), entry.getValue(), symbolTable);
+                    return builder.build();
+                })
                 .collect(Collectors.toList());
+        
         transformedASTs.addAll(normalClassesASTs);
 
         System.out.println("[SUCCESS] Merged versioned classes");
