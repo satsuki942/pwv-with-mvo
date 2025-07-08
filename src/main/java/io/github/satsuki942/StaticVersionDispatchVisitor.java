@@ -44,14 +44,14 @@ public class StaticVersionDispatchVisitor extends ModifierVisitor<SymbolTable> {
 
     @Override
     public Node visit(com.github.javaparser.ast.stmt.ExpressionStmt exprStmt, SymbolTable symbolTable){
-        // 式文の中身がメソッド呼び出しでなければ、何もしない
         if (!exprStmt.getExpression().isMethodCallExpr()) {
+            // If the expression is not a MethodCallExpr, we cannot resolve it
             return (Node) super.visit(exprStmt, symbolTable);
         }
 
         MethodCallExpr MethodCallExpr = exprStmt.getExpression().asMethodCallExpr();
 
-        if (currentMethodInfo == null) {
+        if (this.currentMethodInfo == null) {
             return (Node) super.visit(exprStmt, symbolTable);
         }
 
@@ -62,7 +62,7 @@ public class StaticVersionDispatchVisitor extends ModifierVisitor<SymbolTable> {
             return (Node) super.visit(exprStmt, symbolTable);
         }
 
-        if (currentClassInfo == null) {
+        if (this.currentClassInfo == null) {
             // If we are not in a class context, we cannot resolve the method call to a versioned method
             return (Node) super.visit(exprStmt, symbolTable); 
         }
@@ -97,88 +97,23 @@ public class StaticVersionDispatchVisitor extends ModifierVisitor<SymbolTable> {
 
         if (matchingMethods.size() == 1) {
             MethodInfo targetMethod = matchingMethods.get(0);
-            // "v1" -> 1 のようにバージョン番号を取得
-            int versionNumber = Integer.parseInt(targetMethod.getVersion().replace("v", ""));
+            int versionNumber = Integer.parseInt(targetMethod.getVersion());
 
-            // 1. 新しいブロック文を作成
+            // Create a new block to switch to the correct version including the original method call expression
             BlockStmt newBlock = new BlockStmt();
-            
-            // 2. 状態切り替えメソッドの呼び出しを追加
             MethodCallExpr switchCall = new MethodCallExpr(
                 MethodCallExpr.getScope().get(), // obj
                 "__switchToVersion",
-                new NodeList<>(new IntegerLiteralExpr(versionNumber))
+                new NodeList<>(new IntegerLiteralExpr(String.valueOf(versionNumber)))
             );
             newBlock.addStatement(new ExpressionStmt(switchCall));
-
-            // 3. 元のメソッド呼び出し文を追加
             newBlock.addStatement(exprStmt.clone());
 
-            // 4. 元の文(ExpressionStmt)を、この新しいブロック(BlockStmt)に置き換える
             return newBlock;
         }
 
         return (Node) super.visit(exprStmt, symbolTable);
-
     }
-
-    // @Override
-    // public Node visit(MethodCallExpr MethodCallExpr, SymbolTable symbolTable) {
-    //     if (currentMethodInfo == null) {
-    //         return (Node) super.visit(MethodCallExpr, symbolTable);
-    //     }
-
-    //     com.github.javaparser.ast.expr.Expression scopeExpr = MethodCallExpr.getScope().orElse(null);
-
-    //     if (scopeExpr == null || !scopeExpr.isNameExpr()) {
-    //         // If there's no scope or it's not a NameExpr, we can't resolve it
-    //         return (Node) super.visit(MethodCallExpr, symbolTable);
-    //     }
-
-    //     if (currentClassInfo == null) {
-    //         // If we are not in a class context, we cannot resolve the method call to a versioned method
-    //         return (Node) super.visit(MethodCallExpr, symbolTable); 
-    //     }
-        
-    //     String varName = scopeExpr.asNameExpr().getNameAsString();
-    //     String typeName = currentMethodInfo.getVariables().get(varName);
-
-    //     if (typeName == null) {
-    //         // If the type name is not found in the current method's variables, we cannot resolve it
-    //         return (Node) super.visit(MethodCallExpr, symbolTable);
-    //     }
-
-    //     ClassInfo classInfo = symbolTable.lookupClass(typeName);
-
-    //     if(classInfo == null || !classInfo.isVersioned()) {
-    //         // If the class is not found or is not versioned, we cannot resolve the method call to a versioned method
-    //         return (Node) super.visit(MethodCallExpr, symbolTable);
-    //     }
-
-    //     List<MethodInfo> candidates = classInfo.getMethods().get(MethodCallExpr.getNameAsString());
-
-    //     if (candidates == null || candidates.isEmpty()) {
-    //         // If no methods are found with the given name, we cannot resolve it
-    //         return (Node) super.visit(MethodCallExpr, symbolTable);
-    //     }
-
-    //     List<String> argumentTypes = resolveArgumentTypes(MethodCallExpr.getArguments(), symbolTable);
-
-    //     List<MethodInfo> matchingMethods = candidates.stream()
-    //         .filter(m -> m.getParameterTypes().equals(argumentTypes))
-    //         .collect(Collectors.toList());
-
-    //     if (matchingMethods.size() == 1) {
-    //         MethodInfo targetMethod = matchingMethods.get(0);
-    //         String newMethodName = targetMethod.getName() + "__" + targetMethod.getVersion() + "__";
-
-    //         MethodCallExpr newNode = MethodCallExpr.clone();
-    //         newNode.setName(newMethodName);
-    //         return newNode;
-    //     }
-
-    //     return (Node) super.visit(MethodCallExpr, symbolTable);
-    // }
 
     private List<String> resolveArgumentTypes(NodeList<com.github.javaparser.ast.expr.Expression> arguments, SymbolTable symbolTable) {
         if (arguments.isEmpty()) return new ArrayList<>();
