@@ -1,12 +1,8 @@
 package sample;
 
-
-// Positive Test: : Static Version Dispatching
-// Expected Result:
-/*
- * Hello from version 1 of Test class.
- * Hello from version 1 of Test class.
- */
+// Positive Test:
+// - 2 version of the Test class
+// - Calling a method that is defined in multiple versions
 public class Main {
     public static void main(String[] args) {
         Test obj = new Test();

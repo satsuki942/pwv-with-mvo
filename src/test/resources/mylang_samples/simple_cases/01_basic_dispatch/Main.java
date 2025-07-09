@@ -1,11 +1,8 @@
 package sample;
 
-// Positive Test: Static Version Dispatching
-// Expected Result:
-/*
- * This is version 1 of Test class.
- * This is VERSION 2 of Test class, World
- */
+// Positive Test: 
+// - 2 version of the Test class
+// - Calling methods that are defined in only one version
 public class Main {
     public static void main(String[] args) {
         Test obj = new Test();

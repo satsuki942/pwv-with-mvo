@@ -1,0 +1,2 @@
+Hello from version 1 of Test class.
+Hello from version 1 of Test class.

@@ -1,15 +1,9 @@
 package sample;
 
-
-// Positive Test: Dynamic Version Dispatching
-// Expected Result:
-/*
- * V1 display: Called.
- * V1 log: 123
- * V1 display: Called.
- * V2 log: hello
- * V2 display: Called.
- */
+// Positive Test:
+// - 2 version of the Test class
+// - Calling a method defined in multiple versions and a method defined in only one version
+// - Dynamic dispatch based on current version attribute
 public class Main {
     public static void main(String[] args) {
         Test obj = new Test();

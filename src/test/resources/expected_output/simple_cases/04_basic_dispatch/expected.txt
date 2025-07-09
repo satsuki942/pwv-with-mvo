@@ -1,0 +1,5 @@
+V1 display: Called.
+V1 log: 123
+V1 display: Called.
+V2 log: hello
+V2 display: Called.
