@@ -153,7 +153,7 @@ public class UnifiedClassBuilder {
         }
 
         if (behaviorInterface == null) {
-            System.err.println("Error: Could not find IVersionBehavior interface in the generated class.");
+            Logger.errorLog("Could not find IVersionBehavior interface in the generated class.");
             return;
         }
 

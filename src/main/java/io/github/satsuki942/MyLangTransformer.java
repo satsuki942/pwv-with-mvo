@@ -1,11 +1,6 @@
 package io.github.satsuki942;
 
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.Node;
 
 import io.github.satsuki942.symboltable.SymbolTable;
@@ -13,7 +8,6 @@ import io.github.satsuki942.symboltable.SymbolTable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -24,7 +18,7 @@ public class MyLangTransformer {
     private static final Pattern VERSIONED_CLASS_PATTERN = Pattern.compile("(.+)__(\\d+)__$");
 
     public List<CompilationUnit> transform(List<CompilationUnit> MyLangASTs) {
-        System.out.println("Starting transformation...");
+        Logger.debugLog("Starting transformation...");
 
 
         // STEP1: Generate a symbol table
@@ -34,7 +28,7 @@ public class MyLangTransformer {
             analysisVisitor.visit(cu, symbolTable);
         }
 
-        System.out.println("[SUCCESS] Generated a symbol table");
+        Logger.successLog("Generated a symbol table");
 
 
         // STEP2: Dispatch versions of method calls
@@ -47,12 +41,11 @@ public class MyLangTransformer {
             }
         }
 
-        System.out.println("[SUCCESS] Dispatched versions of method calls");
-        System.out.println("    AST display is omitted");
+        Logger.successLog("Dispatched versions of method calls");
         // Print the transformed ASTs for debugging
         // transformedAsts.forEach(cu -> {
-        //     System.out.println("Transformed AST: " + cu.getPrimaryTypeName().orElse("Unnamed"));
-        //     System.out.println(cu.toString());
+        //     Logger.debugLog("Transformed AST: " + cu.getPrimaryTypeName().orElse("Unnamed"));
+        //     Logger.debugLog(cu.toString());
         // });
 
 
@@ -75,9 +68,9 @@ public class MyLangTransformer {
         
         transformedASTs.addAll(normalClassesASTs);
 
-        System.out.println("[SUCCESS] Merged versioned classes");
+        Logger.successLog("Merged versioned classes");
 
-        System.out.println("[SUCCESS] Whole transformation completed");
+        Logger.successLog("Whole transformation completed");
         return transformedASTs;
     }
 

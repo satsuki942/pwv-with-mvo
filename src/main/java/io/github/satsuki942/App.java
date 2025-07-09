@@ -24,6 +24,8 @@ public class App {
     static private String OUTPUTPACKAGE = "sample";
     public static void main(String[] args) {
 
+        Logger.DEBUG_MODE = "true".equalsIgnoreCase(System.getProperty("debug"));
+
         Path inputDir = Paths.get(INPUTPATH + args[0]);
         Path outputDir = Paths.get(OUTPUTPATH + OUTPUTPACKAGE);
 
@@ -34,7 +36,7 @@ public class App {
             e.printStackTrace();
             return;
         }
-        System.out.println("[SUCCESS] Created output directory: " + outputDir);
+        Logger.successLog("Output directory created: " + outputDir);
 
         // 1. parse Java files in the input directory to create MyLang-ASTs
         List<CompilationUnit> MyLangASTs = new ArrayList<>();
@@ -49,7 +51,7 @@ public class App {
             e.printStackTrace();
             return;
         }
-        System.out.println("[SUCCESS] Parsed " + MyLangASTs.size() + " MyLang-ASTs from " + inputDir);
+        Logger.successLog("Parsed MyLang-ASTs from: " + inputDir);
 
         // 2. call the transformer to transform the MyLang-ASTs
         MyLangTransformer transformer = new MyLangTransformer();
@@ -60,7 +62,7 @@ public class App {
         for (CompilationUnit cu : transpiledAsts) {
             // For Debuging: Print the transpiled AST in YAML format
             // YamlPrinter printer = new YamlPrinter(true);
-            // System.out.println(printer.output(cu));
+            // Logger.debugLog(printer.output(cu));
             
             String className = cu.getTypes().stream()
                         .filter(type -> type.isPublic() && type.isClassOrInterfaceDeclaration())
@@ -77,29 +79,29 @@ public class App {
         }
 
         // 4. compile the transpiled sources
-        System.out.println("Compiling transpiled sources...");
+        Logger.debugLog("Compiling transpiled sources...");
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         int compilationResult = compiler.run(null, null, null, 
             generatedFilePaths.toArray(new String[0]));
 
         if (compilationResult == 0) {
-            System.out.println("[SUCCESS] Compilation Succeeded.");
+            Logger.successLog("Compilation Succeeded.");
         } else {
-            System.err.println("[ERROR] Compilation Failed.");
+            Logger.errorLog("Compilation Failed.");
             return;
         }
 
         // 5. run the compiled code
-        System.out.println("Running compiled code...");
+        Logger.debugLog("Running compiled code...");
         try {
-            System.out.println("\nRunning Result: ----------------------");
+            Logger.Log("\nRunning Result: ----------------------");
             Path outputPath = Paths.get(OUTPUTPATH);
             runProcess(outputPath, OUTPUTPACKAGE + ".Main");
-            System.out.println("--------------------------------------\n");
+            Logger.Log("--------------------------------------\n");
         } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
+            Logger.errorLog("Error occurred while running compiled code: " + e.getMessage());
         }
-        System.out.println("[SUCCESS] Execution completed.");
+        Logger.successLog("Execution completed.");
     }
 
     private static void runProcess(Path classpath, String mainClass) throws IOException, InterruptedException {
