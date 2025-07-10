@@ -17,6 +17,7 @@ import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
 
 import io.github.satsuki942.symboltable.ClassInfo;
 import io.github.satsuki942.symboltable.MethodInfo;
@@ -168,25 +169,33 @@ public class UnifiedClassBuilder {
         for (List<MethodInfo> overloads : methodsBySignature.values()) {
             MethodInfo firstOverload = overloads.get(0);
             MethodDeclaration stub = createMethodStubSignature(firstOverload);
+            MethodCallExpr callExpr;
 
             if (overloads.size() > 1) { // Ambiguous method defined in along multiple versions
                 behaviorInterface.addMember(createMethodStubSignature(firstOverload).setBody(null));
-                MethodCallExpr delegateCall = new MethodCallExpr(
+                callExpr = new MethodCallExpr(
                         new FieldAccessExpr(new ThisExpr(), "currentState"),
                         stub.getNameAsString()
                 );
-                stub.getParameters().forEach(p -> delegateCall.addArgument(new NameExpr(p.getNameAsString())));
-                stub.setBody(new BlockStmt().addStatement(delegateCall));
 
             } else { // Unambiguous method defined in a single version
                 String versionSuffix = firstOverload.getVersion().toLowerCase();
-                MethodCallExpr directCall = new MethodCallExpr(
+                callExpr = new MethodCallExpr(
                         new FieldAccessExpr(new ThisExpr(), "v" + versionSuffix + "_instance"),
                         stub.getNameAsString()
                 );
-                stub.getParameters().forEach(p -> directCall.addArgument(new NameExpr(p.getNameAsString())));
-                stub.setBody(new BlockStmt().addStatement(directCall));
+                
             }
+            stub.getParameters().forEach(p -> callExpr.addArgument(new NameExpr(p.getNameAsString())));
+            stub.setBody(new BlockStmt().addStatement(callExpr));
+
+            // Handle return type
+            if (firstOverload.getReturnType().equals("void")) {
+                stub.setBody(new BlockStmt().addStatement(callExpr));
+            } else {
+                stub.setBody(new BlockStmt().addStatement(new ReturnStmt(callExpr)));
+            }
+            
             this.newCIDecl.addMember(stub);
         }
     }
