@@ -4,6 +4,8 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 
 import io.github.satsuki942.symboltable.SymbolTable;
+import io.github.satsuki942.util.Logger;
+import io.github.satsuki942.util.AstUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,8 +16,7 @@ import java.util.stream.Collectors;
 
 public class MyLangTransformer {
 
-    // regex pattern to find versioned classes: e.g., "Test__1__", "Test__2__"
-    private static final Pattern VERSIONED_CLASS_PATTERN = Pattern.compile("(.+)__(\\d+)__$");
+    private static final Pattern VERSIONED_CLASS_PATTERN = AstUtil.getVersionedClassPattern();
 
     public List<CompilationUnit> transform(List<CompilationUnit> MyLangASTs) {
         Logger.debugLog("Starting transformation...");
@@ -52,10 +53,10 @@ public class MyLangTransformer {
         // STEP3: Merge versioned classes
         // Separate normal classes and versioned classes
         List<CompilationUnit> normalClassesASTs = MyLangASTs.stream()
-                .filter(cu -> !isVersioned(cu))
+                .filter(cu -> !AstUtil.isVersioned(cu))
                 .collect(Collectors.toList());
         Map<String, List<CompilationUnit>> versionedClassMap = MyLangASTs.stream()
-                .filter(this::isVersioned)
+                .filter(AstUtil::isVersioned)
                 .collect(Collectors.groupingBy(this::getBaseName));
 
         // Create versioned class definitions (= transformed ASTs)
@@ -74,14 +75,7 @@ public class MyLangTransformer {
         return transformedASTs;
     }
 
-    // check if the class is versioned
-    private boolean isVersioned(CompilationUnit cu) {
-        return cu.getPrimaryTypeName()
-                 .map(name -> VERSIONED_CLASS_PATTERN.matcher(name).matches())
-                 .orElse(false);
-    }
-
-    // extract base name from versioned class name
+    // -- HELPER METHODS --
     private String getBaseName(CompilationUnit cu) {
         return cu.getPrimaryTypeName()
                  .map(name -> {

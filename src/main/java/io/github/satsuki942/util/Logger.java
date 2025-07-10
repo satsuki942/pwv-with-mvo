@@ -1,4 +1,4 @@
-package io.github.satsuki942;
+package io.github.satsuki942.util;
 
 public class Logger {
     public static boolean DEBUG_MODE = false;
