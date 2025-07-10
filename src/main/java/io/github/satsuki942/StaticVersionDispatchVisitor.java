@@ -2,6 +2,8 @@ package io.github.satsuki942;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.github.javaparser.ast.Node;
@@ -9,8 +11,10 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.NodeList;
 
@@ -20,6 +24,7 @@ import io.github.satsuki942.symboltable.SymbolTable;
 
 public class StaticVersionDispatchVisitor extends ModifierVisitor<SymbolTable> {
 
+    private static final Pattern VERSIONED_CLASS_PATTERN = Pattern.compile("(.+)__(\\d+)__$");
     private ClassInfo currentClassInfo;
     private MethodInfo currentMethodInfo;
 
@@ -115,6 +120,24 @@ public class StaticVersionDispatchVisitor extends ModifierVisitor<SymbolTable> {
         return (Node) super.visit(exprStmt, symbolTable);
     }
 
+    @Override
+    public Node visit(ClassOrInterfaceType classInterfaceType, SymbolTable symbolTable) {
+        String typeName = classInterfaceType.getNameAsString();
+        Matcher matcher = VERSIONED_CLASS_PATTERN.matcher(typeName);
+        if (matcher.matches()) {
+            String baseName = matcher.group(1);
+            classInterfaceType.setName(baseName);
+        }
+        return (Node) super.visit(classInterfaceType, symbolTable);
+    }
+
+    @Override
+    public Node visit(ObjectCreationExpr objCreationExpr, SymbolTable symbolTable) {
+        objCreationExpr.setType((ClassOrInterfaceType) visit(objCreationExpr.getType(), symbolTable));
+        return (Node) super.visit(objCreationExpr, symbolTable);
+    }
+
+    // HELPERS
     private List<String> resolveArgumentTypes(NodeList<com.github.javaparser.ast.expr.Expression> arguments, SymbolTable symbolTable) {
         if (arguments.isEmpty()) return new ArrayList<>();
         List<String> argTypes = new ArrayList<>();

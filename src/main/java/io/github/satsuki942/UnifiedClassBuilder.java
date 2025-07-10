@@ -13,16 +13,19 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.ThisExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 
 import io.github.satsuki942.symboltable.ClassInfo;
 import io.github.satsuki942.symboltable.MethodInfo;
 import io.github.satsuki942.symboltable.SymbolTable;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,22 +54,23 @@ public class UnifiedClassBuilder {
     }
 
     public CompilationUnit build() {
-        // 2. Stateパターンに必要なインフラ（内部クラス、フィールド等）を生成
+        // Generate the unified class structure
         generateStateInfrastructure();
 
-        // 3. 全てのバージョンからメソッド等をマージし、名前修飾する
+        // Merge members from all versioned classes into the unified class
         mergeMembersIntoImplClasses();
 
-        // 4. 公開スタブメソッドを生成する
+        // Generate public stubs for methods
         generatePublicStubs();
+
+        // Generate public constructors for the unified class
+        generatePublicConstructors();
 
         return newCu;
     }
     
-    // 
     private void generateStateInfrastructure() {
         // Generating IVersionBehavior Interface
-
         ClassOrInterfaceDeclaration behaviorInterface = new ClassOrInterfaceDeclaration();
         behaviorInterface.setInterface(true);
         behaviorInterface.setName("IVersionBehavior");
@@ -94,28 +98,78 @@ public class UnifiedClassBuilder {
                     .setPrivate(true).setFinal(true);
         }
         this.newCIDecl.addField("IVersionBehavior", "currentState").setPrivate(true);
-        this.newCIDecl.addMember(createSwitchToVersionMethod());
 
-        // Modifying the Constructor to initialize fields)
-        ConstructorDeclaration constructor = this.newCIDecl.addConstructor().setPublic(true);
-        BlockStmt constructorBody = new BlockStmt();
-        for (CompilationUnit versionCu : versionAsts) {
-            String versionSuffix = getVersionSuffix(versionCu).orElse("").toUpperCase();
-            constructorBody.addStatement(String.format("this.%s_instance = new %s_Impl();", 
-                versionSuffix.toLowerCase(), versionSuffix));
+        // Generating __switchToVersion method
+        this.newCIDecl.addMember(createSwitchToVersionMethod());
+    }
+
+    private void generatePublicConstructors() {
+        // Collect all constructors from all versioned classes
+        Map<String, ConstructorDeclaration> constructorsBySignature = new HashMap<>();
+        for (CompilationUnit cu : versionAsts) {
+            cu.findAll(ConstructorDeclaration.class).forEach(ctor -> {
+                constructorsBySignature.putIfAbsent(ctor.getSignature().asString(), ctor);
+            });
         }
-        String defaultVersionSuffix = getVersionSuffix(versionAsts.get(0)).orElse("v1").toLowerCase();
-        constructorBody.addStatement(String.format("this.currentState = this.%s_instance;", defaultVersionSuffix));
-        constructor.setBody(constructorBody);
+
+        // When no constructors are found, create a default constructor
+        if (constructorsBySignature.isEmpty()) {
+            ConstructorDeclaration defaultCtor = this.newCIDecl.addConstructor(Modifier.Keyword.PUBLIC);
+            BlockStmt body = new BlockStmt();
+            for(CompilationUnit cu : versionAsts) {
+                String implClassName = getVersionSuffix(cu).orElse("").toUpperCase() + "_Impl";
+                String instanceName = getVersionSuffix(cu).orElse("").toLowerCase() + "_instance";
+                body.addStatement(new AssignExpr(
+                    new FieldAccessExpr(new ThisExpr(), instanceName),
+                    new ObjectCreationExpr(null, new ClassOrInterfaceType(null, implClassName), new NodeList<>()),
+                    AssignExpr.Operator.ASSIGN
+                ));
+            }
+
+            String defaultVersionSuffix = getVersionSuffix(versionAsts.get(0)).orElse("v1").toLowerCase();
+            body.addStatement(String.format("this.currentState = this.%s_instance;", defaultVersionSuffix));
+            defaultCtor.setBody(body);
+            return;
+        }
+
+        // Generate public constructors corresponding to the collected constructors
+        for (ConstructorDeclaration originalCtor : constructorsBySignature.values()) {
+            ConstructorDeclaration publicCtor = this.newCIDecl.addConstructor(Modifier.Keyword.PUBLIC);
+            originalCtor.getParameters().forEach(p -> publicCtor.addParameter(p.clone()));
+            
+            BlockStmt body = new BlockStmt();
+            
+            String ctorOwnerVersion = getVersionForConstructor(originalCtor).toLowerCase();
+
+            for (CompilationUnit cu : versionAsts) {
+                String currentVersionSuffix = getVersionSuffix(cu).orElse("").toLowerCase();
+                String implClassName = getVersionSuffix(cu).orElse("").toUpperCase() + "_Impl";
+                String instanceName = currentVersionSuffix + "_instance";
+
+                ObjectCreationExpr newExpr = new ObjectCreationExpr(null, new ClassOrInterfaceType(null,implClassName), new NodeList<>());
+
+                if (currentVersionSuffix.equals(ctorOwnerVersion)) {
+                    originalCtor.getParameters().forEach(p -> newExpr.addArgument(p.getNameAsExpression()));
+                }
+
+                body.addStatement(new AssignExpr(
+                    new FieldAccessExpr(new ThisExpr(), instanceName),
+                    newExpr,
+                    AssignExpr.Operator.ASSIGN
+                ));
+            }
+
+            body.addStatement(String.format("this.currentState = this.%s_instance;", ctorOwnerVersion));
+            publicCtor.setBody(body);
+        }
     }
 
     private void mergeMembersIntoImplClasses() {
         for (CompilationUnit versionCu : versionAsts) {
             String versionSuffix = getVersionSuffix(versionCu).orElse("").toUpperCase();
-            if (versionSuffix.isEmpty()) continue;
             String implClassName = versionSuffix + "_Impl";
 
-            // Found the internal class definition (e.g., V1_Impl, V2_Impl)
+            // Find the internnal implementation class by name (e.g., V1_Impl, V2_Impl)
             ClassOrInterfaceDeclaration foundImplClass = null;
             for (BodyDeclaration<?> member : this.newCIDecl.getMembers()) {
                 if (member.isClassOrInterfaceDeclaration()) {
@@ -126,16 +180,33 @@ public class UnifiedClassBuilder {
                     }
                 }
             }
-            if (foundImplClass == null) continue;
+            if (foundImplClass == null) {
+                System.err.println("Error: Could not find implementation class: " + implClassName);
+                continue;
+            }
 
-            // Merge the members from the versioned CompilationUnit into the found implementation class
             final ClassOrInterfaceDeclaration implClass = foundImplClass;
             versionCu.getPrimaryType().ifPresent(type -> {
-                type.getMembers().forEach(member -> implClass.addMember(member.clone()));
+                type.getMembers().forEach(member -> {
+                    if (member.isConstructorDeclaration()) {
+                        // Constructor: change the name to the internal implementation class name
+                        ConstructorDeclaration constructor = member.asConstructorDeclaration().clone();
+                        constructor.setName(implClassName);
+                        implClass.addMember(constructor);
+                    } else {
+                        implClass.addMember(member.clone());
+                    }
+                });
             });
+
+            boolean hasDefaultConstructor = implClass.getConstructors().stream()
+                .anyMatch(ctor -> ctor.isPublic() && ctor.getParameters().isEmpty());
+                
+            if (!hasDefaultConstructor) {
+                implClass.addConstructor(Modifier.Keyword.PUBLIC);
+            }
         }
     }
-
 
     private void generatePublicStubs() {
         ClassInfo classInfo = symbolTable.lookupClass(baseName);
@@ -268,5 +339,14 @@ public class UnifiedClassBuilder {
         }
         switchMethod.setBody(switchBody);
         return switchMethod;
+    }
+
+    private String getVersionForConstructor(ConstructorDeclaration ctor) {
+        for (CompilationUnit cu : versionAsts) {
+            if (cu.findAll(ConstructorDeclaration.class).stream().anyMatch(c -> c.getSignature().equals(ctor.getSignature()))) {
+                return getVersionSuffix(cu).orElse("v1");
+            }
+        }
+        return "v1"; // Fallback
     }
 }
