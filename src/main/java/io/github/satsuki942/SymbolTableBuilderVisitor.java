@@ -1,11 +1,13 @@
 package io.github.satsuki942;
 
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import io.github.satsuki942.symboltable.ClassInfo;
 import io.github.satsuki942.symboltable.MethodInfo;
+import io.github.satsuki942.symboltable.FieldInfo;
 import io.github.satsuki942.symboltable.SymbolTable;
 
 import java.util.ArrayList;
@@ -43,16 +45,11 @@ public class SymbolTableBuilderVisitor extends VoidVisitorAdapter<SymbolTable> {
         // Prepare a method map depending on the class name
         ClassInfo existingClassInfo = symbolTable.lookupClass(baseName);
         Map<String, List<MethodInfo>> methodsMap = (existingClassInfo != null) ? existingClassInfo.getMethods() : new HashMap<>();
+        Map<String, List<FieldInfo>> fieldsMap = (existingClassInfo != null) ? existingClassInfo.getFields() : new HashMap<>();
 
         // --- Collect all method information in the class ---
         for (MethodDeclaration method : ClassInterfaceDecl.getMethods()) {
 
-            // Collect parameter types as a list of strings
-            String methodName = method.getNameAsString();
-            String returnType = method.getType().asString();
-            List<String> paramTypes = method.getParameters().stream()
-                .map(p -> p.getType().asString())
-                .collect(Collectors.toList());
             Map<String, String> variablesInMethod = new HashMap<>();
             for (Parameter parameter : method.getParameters()) {
                 variablesInMethod.put(parameter.getNameAsString(), parameter.getTypeAsString());
@@ -62,19 +59,32 @@ public class SymbolTableBuilderVisitor extends VoidVisitorAdapter<SymbolTable> {
             }
 
             MethodInfo methodInfo = new MethodInfo(
-                methodName,
-                returnType,
-                paramTypes,
+                method.getNameAsString(),
+                method.getType().asString(),
+                method.getParameters().stream().map(p -> p.getType().asString()).collect(Collectors.toList()),
                 version,
                 variablesInMethod
             );
-            
             // Considering method overloading, store methods in a list by name
             methodsMap.computeIfAbsent(method.getNameAsString(), k -> new ArrayList<>()).add(methodInfo);
         }
 
+        // --- Collect all field information in the class ---
+        for (FieldDeclaration fieldDecl : ClassInterfaceDecl.getFields()) {
+            if (fieldDecl.isPublic()) {
+                for (VariableDeclarator var : fieldDecl.getVariables()) {
+                    FieldInfo fieldInfo = new FieldInfo(
+                        var.getNameAsString(),
+                        var.getTypeAsString(),
+                        version
+                    );
+                    fieldsMap.computeIfAbsent(fieldInfo.getName(), k -> new ArrayList<>()).add(fieldInfo);
+                }
+            }
+        }
+
         // --- Generating ClassInfo, Put it into SymbolTable ---
-        ClassInfo classInfo = new ClassInfo(baseName, isVersioned, methodsMap);
+        ClassInfo classInfo = new ClassInfo(baseName, isVersioned, methodsMap, fieldsMap);
         symbolTable.addClass(classInfo);
 
         // Call the parent class's visit method to allow exploration of nested classes, etc.

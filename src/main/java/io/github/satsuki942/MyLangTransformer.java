@@ -32,17 +32,26 @@ public class MyLangTransformer {
         Logger.successLog("Generated a symbol table");
 
 
-        // STEP2: Dispatch versions of method calls
+        // STEP2: Dispatch versions of method calls & Rewrite field accesses
+        List<CompilationUnit> tempAsts = new ArrayList<>();
         StaticVersionDispatchVisitor transformVisitor = new StaticVersionDispatchVisitor();
-        List<CompilationUnit> transformedAsts = new ArrayList<>();
         for (CompilationUnit cu : MyLangASTs) {
             Node transformedNode = (Node) transformVisitor.visit(cu, symbolTable);
             if (transformedNode instanceof CompilationUnit) {
-                transformedAsts.add((CompilationUnit) transformedNode);
+                tempAsts.add((CompilationUnit) transformedNode);
             }
         }
 
-        Logger.successLog("Dispatched versions of method calls");
+        FieldAccessRewriteVisitor fieldVisitor = new FieldAccessRewriteVisitor();
+        List<CompilationUnit> transformedAsts = new ArrayList<>(); // 最終的な変換結果を格納するリスト
+        for (CompilationUnit cu : tempAsts) { // ← tempAsts (変更後のリスト) を走査
+            Node finalNode = (Node) fieldVisitor.visit(cu, symbolTable);
+            if (finalNode != null) { // フィールド変換ビジターはクラスを削除する場合があるのでnullチェック
+                transformedAsts.add((CompilationUnit) finalNode);
+            }
+        }
+
+        Logger.successLog("Dispatched versions of method calls & Rewrote field accesses");
         // Print the transformed ASTs for debugging
         // transformedAsts.forEach(cu -> {
         //     Logger.debugLog("Transformed AST: " + cu.getPrimaryTypeName().orElse("Unnamed"));

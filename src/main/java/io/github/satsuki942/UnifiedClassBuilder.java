@@ -5,6 +5,7 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 
 import io.github.satsuki942.symboltable.SymbolTable;
 import io.github.satsuki942.unifiedclassbuilder.ConstructorGenerator;
+import io.github.satsuki942.unifiedclassbuilder.GetterSetterGenerator;
 import io.github.satsuki942.unifiedclassbuilder.MemberMerger;
 import io.github.satsuki942.unifiedclassbuilder.StateInfrastructureGenerator;
 import io.github.satsuki942.unifiedclassbuilder.StubMethodGenerator;
@@ -68,6 +69,9 @@ public class UnifiedClassBuilder {
 
         // 4. Generate public constructors for the unified class
         new ConstructorGenerator(this.newCIDecl, this.versionAsts).generate();
+
+        // 5. Generate getter and setter methods for all public fields
+        new GetterSetterGenerator(this.newCIDecl, symbolTable, baseName).generate();
 
         return newCu;
     }
